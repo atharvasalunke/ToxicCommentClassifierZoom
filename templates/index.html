@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom-like Video Call</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f9;
+        }
+
+        .login-container {
+            text-align: center;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .login-container h2 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #333;
+        }
+        .login-container input {
+            padding: 10px;
+            width: 80%;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .login-container button {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .login-container button:hover {
+            background-color: #0056b3;
+        }
+
+        .container {
+            display: none;
+            flex-direction: row;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .video-section {
+            flex: 3;
+            display: flex;
+            flex-wrap: wrap;
+            background-color: #282c34;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            gap: 10px;
+        }
+        .video-placeholder {
+            width: 45%;
+            height: 45%;
+            background-color: #4a4a4a;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            border-radius: 10px;
+        }
+
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #f7f7f7;
+            border-left: 2px solid #ddd;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            max-height: calc(100% - 60px);
+            padding-right: 10px;
+        }
+
+        .chat-message {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
+
+        .chat-message .username {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 2px;
+            text-align: left;
+        }
+
+        .chat-message .message-content {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 70%;
+            align-self: flex-start;
+        }
+
+        .chat-message .timestamp {
+            font-size: 0.8em;
+            color: gray;
+            margin-top: 3px;
+            text-align: right;
+        }
+
+        .chat-input {
+            display: flex;
+            margin-top: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+            font-size: 16px;
+        }
+        .chat-input button {
+            padding: 10px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            border-radius: 0 5px 5px 0;
+        }
+        .chat-input button:hover {
+            background-color: #0056b3;
+        }
+
+        .leave-btn {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .leave-btn:hover {
+            background-color: #cc0000;
+        }
+
+        #admin-controls {
+            display: none;
+            margin-top: 10px;
+        }
+        #admin-controls input {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container" id="login-container">
+        <h2>Join Meeting</h2>
+        <input type="text" id="username" placeholder="Enter your username">
+        <button onclick="joinMeeting()">Join</button>
+    </div>
+
+    <div class="container" id="main-container">
+        <div class="video-section">
+            <div class="video-placeholder">User 1</div>
+            <div class="video-placeholder">User 2</div>
+        </div>
+
+        <div class="chat-section">
+            <h3>Chat</h3>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type a message">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+            <button class="leave-btn" onclick="leaveMeeting()">Leave Meeting</button>
+        </div>
+    </div>
+
+    <div id="admin-controls">
+        <h3>Admin Controls</h3>
+        <input type="text" id="target-username" placeholder="Enter username">
+        <button onclick="moderateMessages()">Remove Messages</button>
+        <button onclick="kickUser()">Kick User</button>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        let username = "";
+
+        function joinMeeting() {
+            username = document.getElementById("username").value.trim();
+            if (!username) {
+                alert("Enter a username!");
+                return;
+            }
+
+            document.getElementById("login-container").style.display = "none";
+            document.getElementById("main-container").style.display = "flex";
+
+            const room = "zoom-room";
+            socket.emit('join', { username, room });
+
+            if (username.toLowerCase() === "admin") {
+                document.getElementById("admin-controls").style.display = "block";
+            } else {
+                document.getElementById("admin-controls").style.display = "none";
+            }
+        }
+
+        function leaveMeeting() {
+            const room = "zoom-room";
+            socket.emit('leave', { username, room });
+            document.getElementById("main-container").style.display = "none";
+            document.getElementById("login-container").style.display = "flex";
+        }
+
+        socket.on('message', data => {
+            const messagesDiv = document.getElementById('chat-messages');
+            if (data.action === "remove") {
+                const allMessages = messagesDiv.querySelectorAll('.chat-message');
+                allMessages.forEach(msg => {
+                    const usernameDiv = msg.querySelector('.username');
+                    if (usernameDiv && usernameDiv.textContent === data.target_username) {
+                        messagesDiv.removeChild(msg);
+                    }
+                });
+            } else if (data.action === "kick") {
+                if (username === data.target_username) {
+                    alert("You have been kicked!");
+                    leaveMeeting();
+                }
+            } else {
+                const chatMessageDiv = document.createElement('div');
+                chatMessageDiv.classList.add('chat-message');
+
+                if (data.username) {
+                    const usernameDiv = document.createElement('div');
+                    usernameDiv.classList.add('username');
+                    usernameDiv.textContent = data.username;
+                    chatMessageDiv.appendChild(usernameDiv);
+                }
+
+                const messageContentDiv = document.createElement('div');
+                messageContentDiv.classList.add('message-content');
+                messageContentDiv.textContent = data.msg;
+                chatMessageDiv.appendChild(messageContentDiv);
+
+                const timestampDiv = document.createElement('div');
+                timestampDiv.classList.add('timestamp');
+                timestampDiv.textContent = new Date().toLocaleTimeString();
+                chatMessageDiv.appendChild(timestampDiv);
+
+                messagesDiv.appendChild(chatMessageDiv);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        });
+
+        function sendMessage() {
+            const msgInput = document.getElementById("message-input");
+            const msg = msgInput.value.trim();
+            if (msg) {
+                socket.emit("send_message", { username, msg, room: "zoom-room" });
+                msgInput.value = "";
+            }
+        }
+
+        function moderateMessages() {
+        const targetUsernameInput = document.getElementById("target-username"); // Corrected ID reference
+        const targetUsername = targetUsernameInput.value.trim(); // Proper declaration and assignment
+        if (!targetUsername) {
+            alert("Enter a username!");
+            return;
+        }
+        socket.emit('moderate_message', { admin_username: username, target_username: targetUsername, room: "zoom-room" });
+    }
+
+        function kickUser() {
+            const targetUsername = document.getElementById("target-username").value.trim();
+            if (!targetUsername) {
+                alert("Enter a username to kick!");
+                return;
+            }
+            socket.emit('kick_user', { admin_username: username, username_to_kick: targetUsername, room: "zoom-room" });
+        }
+        // Add event listener for sending a message on "Enter" key press
+    document.getElementById("message-input").addEventListener("keypress", function (event) {
+        if (event.key === "Enter") { // Check if the pressed key is "Enter"
+            event.preventDefault(); // Prevent default form submission
+            sendMessage(); // Call the sendMessage function
+        }
+    });
+    </script>
+</body>
+</html>
